@@ -1,25 +1,22 @@
 import psycopg2
 import psycopg2.extras
+from flask import Flask, request
 
 
+DB_URL = "postgres://xuijhtqmoyikzo:15b8cb464e2fad66693e89dcb4d8e8b8b93b789281259de9a822399a536a42a4@ec2-54-159-113-254.compute-1.amazonaws.com:5432/dt563jahevl50"
 
-DB_HOST = "localhost"
-DB_NAME = "tikus_events"
-DB_USER = "postgres"
-DB_PASS = "123456"
+app = Flask(__name__)
 
-conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, password=DB_PASS, host=DB_HOST)
+@app.route('/')
+def index():
+    return 'Hello World!'
 
-cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-with conn:
-    with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-        
-        # cur.execute("CREATE TABLE IF NOT EXISTS user_info ( user_id serial PRIMARY KEY, username VARCHAR ( 50 ) UNIQUE NOT NULL, password VARCHAR ( 50 ) NOT NULL,email VARCHAR ( 255 ) UNIQUE NOT NULL,created_on TIMESTAMP NOT NULL,profile_url VARCHAR ( 250 ), followers INT );")
-        
+@app.route('/hello')
+def hello():
+    return 'Hello, There!'
 
-conn.commit()
 
-cur.close()
-
-conn.close()
+if __name__ == '__main__':
+    app.debug = True
+    app.run()
