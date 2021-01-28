@@ -1,51 +1,34 @@
-# app.py
-from flask import Flask, request, jsonify
-app = Flask(__name__)
+DB_HOST = "localhost"
+DB_NAME = "tikus_events"
+DB_USER = "postgres"
+DB_PASS = "123456"
 
-@app.route('/getmsg/', methods=['GET'])
-def respond():
-    # Retrieve the name from url parameter
-    name = request.args.get("name", None)
+import psycopg2
+import psycopg2.extras
 
-    # For debugging
-    print(f"got name {name}")
+conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, password=DB_PASS, host=DB_HOST)
 
-    response = {}
+cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-    # Check if user sent a name at all
-    if not name:
-        response["ERROR"] = "no name found, please send a name."
-    # Check if the user entered a number not a name
-    elif str(name).isdigit():
-        response["ERROR"] = "name can't be numeric."
-    # Now the user entered a valid name
-    else:
-        response["MESSAGE"] = f"Welcome {name} to our awesome platform!!"
+# cur.execute("CREATE TABLE user_info (uid SERIAL PRIMARY KEY, user_name VARCHAR, email VARCHAR, pwd VARCHAR, created );")
 
-    # Return the response in json format
-    return jsonify(response)
+# cur.execute("INSERT INTO student (name) VALUES(%s)", ("Halid",))
+# cur.execute("SELECT * FROM student;")
+# print(cur.fetchall())
 
-@app.route('/post/', methods=['POST'])
-def post_something():
-    param = request.form.get('name')
-    print(param)
-    # You can add the test cases you made in the previous function, but in our case here you are just testing the POST functionality
-    if param:
-        return jsonify({
-            "Message": f"Welcome {name} to our awesome platform!!",
-            # Add this option to distinct the POST request
-            "METHOD" : "POST"
-        })
-    else:
-        return jsonify({
-            "ERROR": "no name found, please send a name."
-        })
+with conn:
+    with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        
+        # cur.execute("CREATE TABLE IF NOT EXISTS user_info ( user_id serial PRIMARY KEY, username VARCHAR ( 50 ) UNIQUE NOT NULL, password VARCHAR ( 50 ) NOT NULL,email VARCHAR ( 255 ) UNIQUE NOT NULL,created_on TIMESTAMP NOT NULL,profile_url VARCHAR ( 250 ), followers INT );")
+        # cur.execute("CREATE TABLE IF NOT EXISTS event_info ( event_id serial PRIMARY KEY, user_id VARCHAR ( 50 ) UNIQUE NOT NULL, password VARCHAR ( 50 ) NOT NULL,email VARCHAR ( 255 ) UNIQUE NOT NULL,created_on TIMESTAMP NOT NULL,profile_url VARCHAR ( 250 ), followers INT );")
+        # print(cur.fetchone()['name'])
+        
+        # cur.execute("SELECT * FROM student;")
+        # print(cur.fetchall())
+        
 
-# A welcome message to test our server
-@app.route('/')
-def index():
-    return "<h1>Welcome to our server !!</h1>"
+conn.commit()
 
-if __name__ == '__main__':
-    # Threaded option to enable multiple instances for multiple user access support
-    app.run(threaded=True, port=5000)
+cur.close()
+
+conn.close()
