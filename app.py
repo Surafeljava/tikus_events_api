@@ -46,7 +46,7 @@ jwt = JWTManager(app)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    return jsonify({'message': 'Hello World!', 'User': 'Test User'})
+    return jsonify({'message': 'Hello World!', 'User': 'Test User', 'requesData': request.args.get('abc')})
 
 
 @app.route('/login', methods=['POST'])
