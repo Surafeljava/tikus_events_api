@@ -8,6 +8,8 @@ psycopg2 = "*"
 flask = "*"
 flask-sqlalchemy = "*"
 gunicorn = "*"
+bcrypt = "*"
+flask-jwt-extended = "*"
 
 [dev-packages]
 

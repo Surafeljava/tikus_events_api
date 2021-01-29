@@ -1,7 +1,12 @@
 import psycopg2
 import psycopg2.extras
-from flask import Flask, request
+from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
+
+from flask_jwt_extended import (
+    JWTManager, jwt_required, create_access_token,
+    get_jwt_identity
+)
 
 app = Flask(__name__)
 
@@ -36,9 +41,44 @@ class userInfo(db.Model):
         self.profile_url = profile_url
         self.followers = followers
 
+app.config['JWT_SECRET_KEY'] = 'qwertyuioplmnbvcxzasdfghjk'
+jwt = JWTManager(app)
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     return 'Hello World!'
+
+
+@app.route('/login', methods=['POST'])
+def login():
+    if not request.is_json:
+        return jsonify({"msg": "Missing JSON in request"}), 400
+
+    username = request.json.get('username', None)
+    password = request.json.get('password', None)
+    if not username:
+        return jsonify({"msg": "Missing username parameter"}), 400
+    if not password:
+        return jsonify({"msg": "Missing password parameter"}), 400
+
+    if username == 'test' or password == 'test':
+        return jsonify({"msg": "Bad username or password"}), 401
+
+    # Identity can be any data that is json serializable
+    access_token = create_access_token(identity=username)
+    return jsonify(access_token=access_token), 200
+
+@app.route('/protected', methods=['GET', 'POST'])
+@jwt_required
+def protected():
+    
+    current_user = get_jwt_identity()
+    
+    if request.method == 'POST':
+        return jsonify({"user": request.json['user'], "logged_in_as": current_user, "data": request.json['data']})
+    
+    
+    return jsonify(logged_in_as=current_user), 200
 
 
 @app.route('/hello', methods=['GET', 'POST'])
