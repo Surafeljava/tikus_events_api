@@ -2,6 +2,7 @@ import psycopg2
 import psycopg2.extras
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
+from flask_login import logout_user
 
 
 #from app import  userInfo
@@ -59,25 +60,47 @@ jwt = JWTManager(app)
 def index():
     return jsonify({'message': 'Hello World!', 'User': 'Test User', 'requesData': request.args.get('abc')})
 
+# @app.route('/logout', methods=['GET'])
+# def logout():
+#     logout_user()
+#     #user =db.session.query(userInfo).filter_by(email=email).first()
+#     return jsonify({'message':"User Logged Out"}),200
 
 @app.route('/login', methods=['POST'])
 def login():
     if not request.is_json:
         return jsonify({"msg": "Missing JSON in request"}), 400
-
-    username = request.json.get('username', None)
-    password = request.json.get('password', None)
-    if not username:
+    user = request.get_json()
+    username=user['user_name']
+    password=user['password']
+    email=user['email']
+    remember = True if user['remember'] else False
+    #username = request.json.get('user_name', None)
+    #password = request.json.get('password', None)
+    if not username :
         return jsonify({"msg": "Missing username parameter"}), 400
+    if not email :
+        return jsonify({"msg": "Missing email parameter"}), 400    
     if not password:
         return jsonify({"msg": "Missing password parameter"}), 400
 
     if username == 'test' or password == 'test':
         return jsonify({"msg": "Bad username or password"}), 401
 
+    
+    user =db.session.query(userInfo).filter_by(email=email).first()
+    hashed= hashlib.sha256(password.encode())
+    password_check= hashed.hexdigest()
+            
+    if (not user or user.password!=password_check):
+        return jsonify({"msg": str(user.password),"passw2":password_check})
+    else:    
+        access_token = create_access_token(identity=username)
+        return jsonify({"msg":"Logged in success","token":access_token}),200
     # Identity can be any data that is json serializable
-    access_token = create_access_token(identity=username)
-    return jsonify(access_token=access_token), 200
+    # access_token = create_access_token(identity=username)
+    
+    # return jsonify(access_token=access_token), 200
 
 @app.route('/protected', methods=['GET', 'POST'])
 @jwt_required
@@ -101,7 +124,7 @@ def hello():
 
 @app.route("/register", methods=["POST","GET"])
 def register():
-    user = request.get_json()
+    user = request.get_json(force=True)
     #print (content)
     username1=user["user_name"]
     email1=user["email"]
