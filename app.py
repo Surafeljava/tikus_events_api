@@ -163,6 +163,29 @@ def getAllEvents():
             return jsonify(event=[i.serialize for i in event])
         else:
             return jsonify({"message":"no event"},)
+@app.route('/events/deleteEventsById/<int:event_id>',methods=['DELETE'])
+@jwt_required
+def deleteEventById(event_id):
+    current_user=get_jwt_identity()
+    if current_user:
+        event=request.get_json()
+        #event_id = event["event_id"]
+        eventById=db.session.query(EventInfo).filter_by(event_id=event_id).first()
+        userById=db.session.query(userInfo).filter_by(user_name=current_user).first()
+        if eventById and event_id:
+            if userById.id==eventById.user_id:
+                db.session.delete(eventById)
+                db.session.commit()
+                return jsonify({"message":"Event Deleted Succesfully"})
+            else:
+                return jsonify({"message":"UnAuthorized to delete this event"}),401
+        elif(not eventById):
+            return jsonify({"message":"event doesnot exist"})        
+        elif(not event_id):
+            return jsonify({"message":"Input cant  be empty"}) 
+    else:
+        return jsonify({"message":"unAuthenticated user"}),403   
+            
 
 @app.route("/events/viewEventsById",methods=["GET"])
 @jwt_required
