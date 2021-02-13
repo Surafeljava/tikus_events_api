@@ -38,7 +38,7 @@ else:
     app.config['SQLALCHEMY_DATABASE_URI'] = 'postgres://postgres:berrybab0764@localhost:5432/TikusEvent'
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.permanent_session_lifetime = timedelta(minutes=1)
+app.permanent_session_lifetime = timedelta(minutes=5)
 
 db = SQLAlchemy(app)
 
@@ -75,6 +75,53 @@ class userInfo(db.Model):
             'reset_link':self.reset_link
         }
 
+
+class EventInfo(db.Model):
+    __tablename__ = 'event_info'
+    event_id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user_info.id'),nullable=False)
+    user_info = db.relationship("userInfo", backref=db.backref("user_info", uselist=False))
+    title=db.Column(db.String(150))
+    description = db.Column(db.String(250))
+    event_created_on = db.Column(db.DateTime)
+    event_begins_on = db.Column(db.DateTime)
+    event_ends_on = db.Column(db.DateTime)
+    event_deadline = db.Column(db.DateTime)
+    event_picture = db.Column(db.String(250))
+    to_be_accepted_users_num = db.Column(db.Integer)
+    registered_users_num = db.Column(db.Integer)
+    
+
+    def __init__(self, user_id,title,description,event_created_on,event_begins_on, event_ends_on,event_deadline,event_picture,to_be_accepted_users_num,registered_users_num):
+        #self.event_id = event_id
+        self.user_id=user_id
+        self.title=title
+        self.description = description
+        self.event_created_on=event_created_on
+        self.event_begins_on=event_begins_on
+        self.event_ends_on=event_ends_on
+        self.event_deadline=event_deadline
+        self.event_picture=event_picture
+        self.to_be_accepted_users_num=to_be_accepted_users_num
+        self.registered_users_num=registered_users_num
+        
+    @property
+    def serialize(self):
+        return {
+            'event_id':self.event_id,
+            'user_id':self.user_id,
+            'title':self.title,
+            'description':self.description,
+            'event_created_on':self.event_created_on,
+            'event_begins_on':self.event_begins_on,
+            'event_ends_on':self.event_ends_on,
+            'event_deadline':self.event_deadline,
+            'event_picture':self.event_picture,
+            'to_be_accepted_users_num':self.to_be_accepted_users_num,
+            'registered_users_num':self.registered_users_num
+            
+        }
+
 app.config['SECRET_KEY'] = 'qwertyuioplmnbvcxzasdfghjk'
 jwt = JWTManager(app)
 
@@ -104,20 +151,112 @@ def sendMailDemo(email,hashCode):
 def index():
     return jsonify({'message': 'Hello World!', 'User': 'Test User', 'requesData': request.args.get('abc')})
 
-@app.route('/user/updateprofile',methods=["POST","GET"])
+@app.route('/events/viewAllEvents',methods=['GET'])
+@jwt_required
+def getAllEvents():
+    current_user=get_jwt_identity()
+    if current_user:
+        event=db.session.query(EventInfo).all()
+        # result=users_schema.dumps(user)
+        if event:
+            # return jsonify(result=result)
+            return jsonify(event=[i.serialize for i in event])
+        else:
+            return jsonify({"message":"no event"},)
+
+@app.route("/events/viewEventsById",methods=["GET"])
+@jwt_required
+def getEventsById():
+    current_user=get_jwt_identity()
+    if not current_user:
+        return jsonify({"message":"UnAthenticated User"}),403
+    else:
+        user=db.session.query(userInfo).filter_by(user_name=current_user).first()
+        if user:
+            events=db.session.query(EventInfo).filter_by(user_id=user.id)
+            if events:
+                return jsonify(event=[i.serialize for i in events])
+    
+
+@app.route('/events/addEventPicture',methods=["POST","GET"])
+@jwt_required
+def addEventPicture():
+    current_user = get_jwt_identity()
+    if current_user:
+        #user =db.session.query(userInfo).filter_by(user_name=current_user).first()
+
+        file=request.files['event_picture']
+        try:
+            file.save(os.path.join('events', file.filename))
+        except:
+            return jsonify({"error":"Error while uploading image"}),401
+        # user.profile_url=file.filename
+        # db.session.commit()
+        return jsonify({"filename":file.filename})
+    else:
+        return jsonify({"mesage":"you are not Signed in"}),403
+
+@app.route('/events/addEvent',methods=["POST"])
+@jwt_required
+def addevent():
+    current_user = get_jwt_identity()
+    if not current_user:
+        return jsonify({"message":"UnAthenticated User"}),403
+    else:
+        event = request.get_json(force=True)
+        title=event["title"]
+        description=event["description"]
+        event_picture=event['event_picture']
+        
+        #user id from UserInfo table
+        user =db.session.query(userInfo).filter_by(user_name=current_user).first()
+        user_id=user.id
+        #user_id=2
+        to_be_accepted_users_num=event["sit_limit"]
+        #to_be_accepted_users_num=100
+        registered_users_num=0
+        event_created_on=dt.now()
+        event_begins_on=event["event_begins_on"]
+        event_ends_on=event["event_ends_on"]
+        event_deadline=event["event_deadline"]
+        if not title or not to_be_accepted_users_num or not event_picture or not description or not event_begins_on or not event_deadline or not event_ends_on:
+            return jsonify({"message":"Fields Can not be Empty"}),401     
+        else:
+            new_event = EventInfo(user_id=user_id,
+                title=title,
+                description=description,
+                event_created_on=event_created_on,
+                event_begins_on=event_begins_on,
+                event_ends_on=event_ends_on,
+                event_deadline=event_deadline,
+                event_picture=event_picture,#file.filename,
+                to_be_accepted_users_num=to_be_accepted_users_num,
+                registered_users_num=registered_users_num)
+            db.session.add(new_event)
+            try:
+                db.session.commit()
+            except psycopg2.Error as e:
+                message = "Database error: " + e + "/n SQL: " + new_user
+                return jsonify({"message":message}),401 #render_template("register.html", message = t_message)
+           
+            return jsonify({"message":"event Added Succesfully"})#,event=[new_event.serialize])
+
+
+
+@app.route('/users/updateprofile',methods=["POST","GET"])
 @jwt_required
 def updateUserProfile():
     current_user = get_jwt_identity()
     if current_user:
         user =db.session.query(userInfo).filter_by(user_name=current_user).first()
-    
-        file=request.files['file']
-        file.save(os.path.join('uploads', file.filename))
-        user.profile_url=file.filename
-        db.session.commit()
-        return jsonify({"filename":file.filename})
+        if user:
+            file=request.files['file']
+            file.save(os.path.join('uploads', file.filename))
+            user.profile_url=file.filename
+            db.session.commit()
+            return jsonify({"filename":file.filename})
 
-@app.route('/changePassword',methods=["POST","GET"])
+@app.route('/auth/changePassword',methods=["POST","GET"])
 @jwt_required
 def changePassword():
     if request.method=="POST":
@@ -147,7 +286,7 @@ def changePassword():
             return jsonify({"message":"Input must not be empty"})    
 
 import random
-@app.route('/forgotPassword',methods=["POST","GET"])
+@app.route('/auth/forgotPassword',methods=["POST","GET"])
 def forgotPassword():
     current_user=get_jwt_identity()
     if current_user:
@@ -170,7 +309,7 @@ def forgotPassword():
         db.session.commit()          
         return jsonify({"message":"Reset Link sent to your email address"})
 
-@app.route("/resetPassword",methods=["POST","GET"])
+@app.route("/auth/resetPassword",methods=["POST","GET"])
 def resetPassword():
     user=request.get_json()
     reset_link=user["reset_link"]
@@ -187,7 +326,7 @@ def resetPassword():
     db.session.commit()
     return jsonify({"message":"reset Succesfully,now u can login into ur account"})    
 
-@app.route('/user/viewAllUsers',methods=['GET'])
+@app.route('/users/viewAllUsers',methods=['GET'])
 @jwt_required
 def getAllUsers():
     current_user=get_jwt_identity()
@@ -208,17 +347,17 @@ def displayImage():
     filename='uploads/' + user.profile_url
     return jsonify({"filename":filename})
 
-@app.route('/logout', methods=['GET'])
+@app.route('/auth/logout', methods=['GET'])
 @jwt_required
 def logout():
     current_user=get_jwt_identity()
 
-    session.pop('user', None)
+    session.pop('username', None)
 
     #user =db.session.query(userInfo).filter_by(email=email).first()
     return jsonify({'message':"User Logged Out"}),200
 
-@app.route('/login', methods=['POST'])
+@app.route('/auth/login', methods=['POST'])
 def login():
     if not request.is_json:
         return jsonify({"msg": "Missing JSON in request"}), 400
@@ -226,39 +365,37 @@ def login():
     username=user['user_name']
     password=user['password']
     email=user['email']
-    #remember = True if user['remember'] else False
-    #username = request.json.get('user_name', None)
-    #password = request.json.get('password', None)
-    if not username :
-        return jsonify({"msg": "Missing username parameter"}), 400
+    if not username and  not password:
+        return jsonify({"msg": "Missing username  or password"}), 400
     if not email :
         return jsonify({"msg": "Missing email parameter"}), 400    
-    if not password:
-        return jsonify({"msg": "Missing password parameter"}), 400
+    # if not password:
+    #     return jsonify({"msg": "Missing password parameter"}), 400
 
     if username == 'test' or password == 'test':
         return jsonify({"msg": "Bad username or password"}), 401
 
     
     user =db.session.query(userInfo).filter_by(email=email).first()
-    hashed= hashlib.sha256(password.encode())
-    password_check= hashed.hexdigest()
+    userN=db.session.query(userInfo).filter_by(user_name=username).first()
+    if user or usern:
+        hashed= hashlib.sha256(password.encode())
+        password_check= hashed.hexdigest()
             
-    if (not user ):
-        return jsonify({"message":"Incorrect Email or Password"})
-    elif( user.password!=password_check):
-        return jsonify({"msg": "Incorrect Password or Email"})
-    else:    
-        access_token = create_access_token(identity=username)
-        #set_session_timeout()
-        session.permanent = True
-        session['user']=username
         
-        return jsonify({"msg":"Logged in success","token":access_token}),200
+        if( user.password!=password_check):
+            return jsonify({"msg": "Incorrect Password or Email"})
+        else:    
+            access_token = create_access_token(identity=username)
+          
+            session.permanent = True
+            session['user']=username
+            return jsonify({"msg":"Logged in success","token":access_token}),200
     # Identity can be any data that is json serializable
     # access_token = create_access_token(identity=username)
     
     # return jsonify(access_token=access_token), 200
+
 
 @app.route('/protected', methods=['GET', 'POST'])
 @jwt_required
@@ -273,16 +410,8 @@ def protected():
     return jsonify(logged_in_as=current_user), 200
 
 
-@app.route('/hello', methods=['GET', 'POST'])
-def hello():
-    if request.method == 'POST':
-        return 'Hello, There!'
-    else:
-        return 'Hello'
 
-
-
-@app.route("/register", methods=["POST","GET"])
+@app.route("/auth/register", methods=["POST","GET"])
 def register():
     user = request.get_json(force=True)
     #print (content)
