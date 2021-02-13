@@ -266,7 +266,7 @@ def addevent():
 
 
 
-@app.route('/users/updateprofile',methods=["POST","GET"])
+@app.route('/users/updateprofile',methods=["PUT"])
 @jwt_required
 def updateUserProfile():
     current_user = get_jwt_identity()
@@ -279,10 +279,10 @@ def updateUserProfile():
             db.session.commit()
             return jsonify({"filename":file.filename})
 
-@app.route('/auth/changePassword',methods=["POST","GET"])
+@app.route('/auth/changePassword',methods=["PUT"])
 @jwt_required
 def changePassword():
-    if request.method=="POST":
+    if request.method=="PUT":
         userSess=get_jwt_identity()
         """User Password"""
         user=request.get_json()
@@ -306,7 +306,9 @@ def changePassword():
                 return jsonify({"message":"Password Changed Succesfully"}),200
             return jsonify({"message":"nothing"})
         else:
-            return jsonify({"message":"Input must not be empty"})    
+            return jsonify({"message":"Input must not be empty"}) 
+    else:
+        return jsonify({"message":"Unable To Change Password"})   
 
 import random
 @app.route('/auth/forgotPassword',methods=["POST","GET"])
@@ -332,7 +334,7 @@ def forgotPassword():
         db.session.commit()          
         return jsonify({"message":"Reset Link sent to your email address"})
 
-@app.route("/auth/resetPassword",methods=["POST","GET"])
+@app.route("/auth/resetPassword",methods=["PUT"])
 def resetPassword():
     user=request.get_json()
     reset_link=user["reset_link"]
@@ -365,10 +367,13 @@ def getAllUsers():
 
 
 @app.route('/display', methods=['GET'])
+@jwt_required
 def displayImage():
-    user =db.session.query(userInfo).filter_by(user_name="leali").first()
-    filename='uploads/' + user.profile_url
-    return jsonify({"filename":filename})
+    current_user=get_jwt_identity()
+    if current_user:
+        user =db.session.query(userInfo).filter_by(user_name=current_user).first()
+        filename='uploads/' + user.profile_url
+        return jsonify({"filename":filename})
 
 @app.route('/auth/logout', methods=['GET'])
 @jwt_required
