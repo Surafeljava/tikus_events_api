@@ -4,8 +4,13 @@ from flask import Flask, jsonify, request,session,flash,url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import logout_user
 from datetime import timedelta
+from sqlalchemy import (
+    Column,
+    Integer,
+    String
+)
 import os
-
+#from sqlalchemy.dialects.postgresql import UUID
 from werkzeug.utils import secure_filename
 
 #from app import  userInfo
@@ -42,9 +47,19 @@ app.permanent_session_lifetime = timedelta(minutes=5)
 
 db = SQLAlchemy(app)
 
+# register_to_event = db.Table('register_to_event',
+#     db.Column('id', UUID(as_uuid=True), primary_key=True, default=lambda: uuid.uuid4().hex),
+#     db.Column('user_id', db.Integer, db.ForeignKey('user_info.id')),
+#     db.Column('event_id', db.Integer, db.ForeignKey('event_info.event_id')),
+#     db.Column('seat_num', db.Integer,unique=True)
+
+# )
 
 class userInfo(db.Model):
     __tablename__ = 'user_info'
+    __table_args__ = {'extend_existing':True}
+    #__table_args__ = {'schema': 'schema_any'}
+    #__abstract__ = True
     id = db.Column(db.Integer, primary_key=True)
     user_name = db.Column(db.String(200), unique=True)
     password = db.Column(db.String(200))
@@ -53,6 +68,9 @@ class userInfo(db.Model):
     profile_url = db.Column(db.String(250))
     followers = db.Column(db.Integer)
     reset_link=db.Column(db.String(255))
+    # event_user = db.relationship("EventInfo",
+    #                  secondary=register_to_event,
+    #                  backref=db.backref('event_info', lazy='dynamic'))
 
     def __init__(self, user_name, password, email, created_on, profile_url, followers,reset_link):
         self.user_name = user_name
@@ -75,6 +93,34 @@ class userInfo(db.Model):
             'reset_link':self.reset_link
         }
 
+class Registered_To_Event(db.Model):
+    __tablename__='register_to_event'
+    id = db.Column(db.Integer, primary_key=True)
+   # id=db.Column('id', UUID(as_uuid=True), primary_key=True, default=lambda: uuid.uuid4().hex)
+    user_id = db.Column(db.Integer, db.ForeignKey('user_info.id'),nullable=False)
+    user_info = db.relationship("userInfo", backref=db.backref("user_event", uselist=False))
+    event_id = db.Column(db.Integer, db.ForeignKey('event_info.event_id'),nullable=False)
+    event_info = db.relationship("EventInfo", backref=db.backref("event_info", uselist=False))
+    seat_num=db.Column('seat_num', db.Integer,unique=True)
+    event_title = db.Column(db.String(150),nullable=False)
+    # event_info = db.relationship("EventInfo", backref=db.backref("event_title", uselist=False))
+    """docstring for Registere_To_Event"""
+    def __init__(self, user_id,event_id,seat_num,event_title):
+        
+        self.user_id=user_id
+        self.event_id=event_id
+        self.seat_num=seat_num
+        self.event_title=event_title
+    @property
+    def serialize(self):
+        return {
+        'id':self.id,
+        'user_id':self.user_id,
+        'event_id':self.event_id,
+        'seat_num':self.seat_num,
+        'event_title':self.event_title
+        }
+
 
 class EventInfo(db.Model):
     __tablename__ = 'event_info'
@@ -90,6 +136,7 @@ class EventInfo(db.Model):
     event_picture = db.Column(db.String(250))
     to_be_accepted_users_num = db.Column(db.Integer)
     registered_users_num = db.Column(db.Integer)
+    
     
 
     def __init__(self, user_id,title,description,event_created_on,event_begins_on, event_ends_on,event_deadline,event_picture,to_be_accepted_users_num,registered_users_num):
@@ -122,6 +169,8 @@ class EventInfo(db.Model):
             
         }
 
+
+
 app.config['SECRET_KEY'] = 'qwertyuioplmnbvcxzasdfghjk'
 jwt = JWTManager(app)
 
@@ -134,6 +183,8 @@ app.config['MAIL_USERNAME']='tikusevents@gmail.com'
 app.config['MAIL_PASSWORD']='TikusEvents@5'
 # import socket
 
+
+
 #app.config.from_pyfile('config.cfg')
 mail=Mail(app)
 # @app.route('/sendMail')
@@ -145,6 +196,49 @@ def sendMailDemo(email,hashCode):
     
 
     # return jsonify({"message":"Mail Sent Succesfully"})
+
+@app.route('/events/registerToEvents',methods=["POST"])
+@jwt_required
+def registerToEvent():
+    current_user=get_jwt_identity()
+    if current_user:
+        event=request.get_json()
+        event_id=event["event_id"]
+        does_event_exist=db.session.query(EventInfo).filter_by(event_id=event_id).first()
+        user=db.session.query(userInfo).filter_by(user_name=current_user).first()
+
+        if does_event_exist and user:
+            sit_limit=does_event_exist.to_be_accepted_users_num
+            registered_user=does_event_exist.registered_users_num
+            if sit_limit > registered_user:
+                available_sit=(sit_limit - registered_user)
+                seat_num=registered_user+1
+                user_id=user.id
+
+                register= Registered_To_Event(user_id=user_id,
+                event_id=event_id,seat_num=seat_num,event_title=does_event_exist.title)
+                db.session.add(register)
+                try:
+                    db.session.commit()
+                    temp=does_event_exist.registered_users_num
+                    does_event_exist.registered_users_num=temp+1
+                    db.session.commit()
+                    socket.getaddrinfo('127.0.0.1', 5000)
+                    msg=Message("Hello,Check this out",recipients=[user.email],sender='tikusevents@gmail.com')
+                    msg.body = "Congats,\nyou are Succesfully Registered to \n " +does_event_exist.title+"\nWhen and When ? --"+ does_event_exist.description + ".\n Please Come Early"        
+                    mail.send(msg)
+                except psycopg2.Error as e:
+                    message = "Database error: " + e + "/n SQL: " + new_user
+                    return jsonify({"message":message}),401 #render_template("register.html", message = t_message)
+           
+                return jsonify({"message":"registerd to an event Succesfully"})#
+
+
+        else:
+            return jsonify({"message":"You are trying to register to unexisting event"}),404
+    else:
+        return jsonify({"message":"unAuthenticated user"}),403
+
 
 
 @app.route('/', methods=['GET', 'POST'])
